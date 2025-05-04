@@ -25,8 +25,8 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Obligatorio para STS
           aws-region: us-east-1
           role-to-assume: LabRole  # Solo si necesitas asumir un rol
-          role-session-name: GitHubActionsSession  # Nombre personalizado para la sesión
-          audience: sts.amazonaws.com  # Necesario para AWS Academy
+          # role-session-name: GitHubActionsSession  # Nombre personalizado para la sesión
+          # audience: sts.amazonaws.com  # Necesario para AWS Academy
 
       - name: Terraform Init
         run: terraform init

@@ -7,6 +7,9 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
 
+    outputs:
+      ec2_ip: ${{ steps.output.outputs.ec2_ip }}
+
     steps:
       # Pulls the latest version of your code from the GitHub repository
       - name: Checkout code
@@ -41,7 +44,4 @@ jobs:
           echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
           echo "EC2 IP Address: ${{ steps.output.outputs.ec2_ip }}"
 
-      - name: Output EC2 IP
-        id: output
-        run: |
-          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+

@@ -5,6 +5,7 @@ on:
 
 jobs:
   terraform:
+    environment: prod
     runs-on: ubuntu-latest
 
     outputs:

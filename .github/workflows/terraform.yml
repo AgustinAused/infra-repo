@@ -6,7 +6,10 @@ on:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-
+    
+    permissions:
+      id-token: write   # Not used for STS, but silences the warning
+      contents: read   
     outputs:
       ec2_ip: ${{ steps.output.outputs.ec2_ip }}
 
@@ -24,9 +27,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Obligatorio para STS
           aws-region: us-east-1
-          role-to-assume: LabRole  # Solo si necesitas asumir un rol
-          # role-session-name: GitHubActionsSession  # Nombre personalizado para la sesión
-          # audience: sts.amazonaws.com  # Necesario para AWS Academy
+          aws-role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
 
       - name: Terraform Init
         run: terraform init

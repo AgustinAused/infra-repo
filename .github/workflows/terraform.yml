@@ -27,8 +27,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Obligatorio para STS
           aws-region: us-east-1
-          # aws-role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          audience: sts.amazonaws.com
 
       - name: Terraform Init
         run: terraform init

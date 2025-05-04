@@ -11,27 +11,26 @@ jobs:
       ec2_ip: ${{ steps.output.outputs.ec2_ip }}
 
     steps:
-      # Pulls the latest version of your code from the GitHub repository
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Installs Terraform on the GitHub runner
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      # Configures your AWS access by using the credentials stored in GitHub Secrets
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (AWS Academy STS)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            aws-region: us-east-1
-            aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Obligatorio para STS
+          aws-region: us-east-1
+          role-to-assume: LabRole  # Solo si necesitas asumir un rol
+          role-session-name: GitHubActionsSession  # Nombre personalizado para la sesión
+          audience: sts.amazonaws.com  # Necesario para AWS Academy
 
       - name: Terraform Init
         run: terraform init
 
-      # Execute the terraform plan
       - name: Terraform Plan
         run: terraform plan
 
@@ -42,6 +41,3 @@ jobs:
         id: output
         run: |
           echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
-          echo "EC2 IP Address: ${{ steps.output.outputs.ec2_ip }}"
-
-

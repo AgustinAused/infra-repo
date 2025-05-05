@@ -12,6 +12,7 @@ variable "ec2_public_key" {
 variable "ec2_ami" {
   description = "EC2 AMI ID"
   type        = string
+  default     = "ami-053b0d53c279acc90"
 }
 
 variable "ec2_type" {

@@ -42,14 +42,14 @@ Desplegar una infraestructura en AWS usando Terraform, integrando dos aplicacion
 ---
 
 ## 📆 4. Cronología de actividades
-| Fecha       | Actividad                                                                 |
-|-------------|---------------------------------------------------------------------------|
+| Fecha       | Actividad                                                                |
+|-------------|--------------------------------------------------------------------------|
 | 2025-04-10  | Setup inicial de Terraform y diseño de la arquitectura                   |
-| 2025-04-11  | EC2 + SG + SSH key + RDS con variables parametrizadas                    |
-| 2025-04-12  | Creación de workflows CI/CD para frontend y backend                      |
-| 2025-04-13  | SonarQube agregado con Docker Compose                                    |
+| 2025-05-06  | EC2 + SG + SSH key + RDS con variables parametrizadas                    |
+| 2025-05-05  | SonarQube agregado con Docker Compose                                    |
+| 2025-05-12  | Creación de workflows CI/CD para frontend y backend                      |
 | 2025-04-14  | Configuración de secrets y automatización STS AWS Academy                |
-| 2025-04-15  | Deploy final y testing                                                    |
+| 2025-04-15  | Deploy final y testing                                                   |
 
 ---
 

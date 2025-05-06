@@ -86,4 +86,5 @@ Desplegar una infraestructura en AWS usando Terraform, integrando dos aplicacion
 - Repositorio Front: [link]
 - Repositorio Backend: [link]
 - Documento de arquitectura (opcional)
-
+- Imagen de Architecture Diagram:
+![Architecture Diagram](![alt text][/assets/image.png])

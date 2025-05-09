@@ -1,7 +1,19 @@
 name: Terraform Infra Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      ec2_ip:
+        description: "EC2 IP"
+        value: ${{ jobs.terraform.outputs.ec2_ip }}
+      db_endpoint: 
+        description: "DB Endpoint"
+        value: ${{ jobs.terraform.outputs.db_endpoint }}
+
 
 jobs:
   terraform:
@@ -37,7 +49,8 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
       
-      - name: Output EC2 IP
+      - name: Output EC2 IP and DB Endpoint
         id: output
         run: |
           echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+          echo "db_endpoint=$(terraform output -raw db_endpoint)" >> $GITHUB_OUTPUT

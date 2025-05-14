@@ -1,3 +1,7 @@
+# ----------------------------------------
+# Outputs útiles - DNS, endpoints y nombres
+# ----------------------------------------
+
 output "alb_dns" {
   description = "DNS del ALB"
   value       = aws_lb.backend.dns_name

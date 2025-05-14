@@ -1,4 +1,6 @@
-
+# --------------------------------------------
+# EC2 SonarQube - Análisis de código CI/CD
+# --------------------------------------------
 resource "aws_instance" "sonarqube" {
   ami           = "ami-0c02fb55956c7d316"  # Amazon Linux 2
   instance_type = "t3.medium"
@@ -15,6 +17,9 @@ resource "aws_instance" "sonarqube" {
   }
 }
 
+# ----------------------------------------------
+# SG SonarQube - Puerto 9000 y SSH autorizado
+# ----------------------------------------------
 resource "aws_security_group" "sonarqube_sg" {
   name        = "sonarqube-sg"
   description = "Permite acceso a SonarQube"

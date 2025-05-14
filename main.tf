@@ -3,7 +3,11 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Creación de VPC
+
+
+# ---------------------------
+# VPC - Red principal privada
+# ---------------------------
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   tags = {
@@ -18,7 +22,9 @@ data "aws_availability_zones" "available" {
 
 
 
-# Subredes Públicas
+# --------------------------------------
+# Subnets Públicas - Para ALB y Backend
+# --------------------------------------
 resource "aws_subnet" "public_az1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -39,7 +45,9 @@ resource "aws_subnet" "public_az2" {
   }
 }
 
-# Subredes Privadas
+# --------------------------------------
+# Subnets Privadas - Para Aurora (RDS)
+# --------------------------------------
 resource "aws_subnet" "private_az1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.3.0/24"
@@ -62,7 +70,9 @@ resource "aws_key_pair" "deployer" {
   public_key = file("~/.ssh/id_rsa.pub")  # Ruta a tu clave pública local
 }
 
-# Security Group para ALB
+# -------------------------------------------
+# Security Group ALB - Permitir HTTP y HTTPS
+# -------------------------------------------
 resource "aws_security_group" "alb_sg" {
   name        = "alb-sg"
   description = "Permite trafico HTTP/HTTPS al ALB"
@@ -90,7 +100,9 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
-# Application Load Balancer (ALB)
+# ----------------------------------------------
+# ALB Backend - Balanceador tráfico de backend
+# ----------------------------------------------
 resource "aws_lb" "backend" {
   name               = "backend-alb"
   internal           = false
@@ -99,7 +111,9 @@ resource "aws_lb" "backend" {
   subnets            = [aws_subnet.public_az1.id, aws_subnet.public_az2.id]
 }
 
-# Target Group para el backend
+# ------------------------------------------------
+# Target Group Backend - Conexión al AutoScaling
+# ------------------------------------------------
 resource "aws_lb_target_group" "backend" {
   name     = "backend-tg"
   port     = 8080  # Puerto de tu aplicación
@@ -115,7 +129,9 @@ resource "aws_lb_target_group" "backend" {
   }
 }
 
-# Listener del ALB
+# --------------------------------------------
+# Listener HTTP - Redirige al Target Group
+# --------------------------------------------
 resource "aws_lb_listener" "backend" {
   load_balancer_arn = aws_lb.backend.arn
   port              = 80
@@ -127,7 +143,9 @@ resource "aws_lb_listener" "backend" {
   }
 }
 
-# Security Group para EC2 (solo permite tráfico del ALB)
+# --------------------------------------------
+# SG EC2 Backend - Acceso desde ALB y por SSH
+# --------------------------------------------
 resource "aws_security_group" "ec2_sg" {
   name        = "ec2-sg"
   description = "Permite trafico del ALB y SSH restringido"
@@ -155,10 +173,9 @@ resource "aws_security_group" "ec2_sg" {
   }
 }
 
-# ---------------------------
-# SECURITY GROUP PARA RDS
-# ---------------------------
-
+# ------------------------------------------
+# SG RDS - Solo acepta tráfico del backend
+# ------------------------------------------
 resource "aws_security_group" "rds_sg" {
   name        = "rds-security-group"
   description = "Permite acceso solo desde el EC2"
@@ -181,11 +198,9 @@ resource "aws_security_group" "rds_sg" {
   depends_on = [aws_security_group.ec2_sg]
 }
 
-# ---------------------------
-# RDS - BASE DE DATOS AURORA
-# ---------------------------
-
-# Grupo de Subredes para Aurora
+# ------------------------------------------
+# Subnet Group Aurora - Uso en dos zonas
+# ------------------------------------------
 resource "aws_db_subnet_group" "aurora_subnet_group" {
   name       = "aurora-subnet-group"
   subnet_ids = [aws_subnet.private_az1.id, aws_subnet.private_az2.id]  # 2 AZs
@@ -195,7 +210,9 @@ resource "aws_db_subnet_group" "aurora_subnet_group" {
   }
 }
 
-# Cluster Aurora PostgreSQL
+# ----------------------------------------------
+# Cluster Aurora - Base PostgreSQL compartida
+# ----------------------------------------------
 resource "aws_rds_cluster" "aurora" {
   cluster_identifier      = "aurora-cluster"
   engine                  = "aurora-postgresql"
@@ -207,7 +224,9 @@ resource "aws_rds_cluster" "aurora" {
   skip_final_snapshot     = true  # ¡En producción usar false y hacer backups!
 }
 
-# Instancia de Base de Datos
+# ----------------------------------------------------
+# Instancia Aurora - Nodo real que atiende consultas
+# ----------------------------------------------------
 resource "aws_rds_cluster_instance" "aurora_instance" {
   identifier          = "aurora-instance-01"
   cluster_identifier  = aws_rds_cluster.aurora.id
@@ -221,7 +240,10 @@ resource "aws_rds_cluster_instance" "aurora_instance" {
 }
 
 
-# Recursos de VPC Internet
+
+# ----------------------------------------
+# Internet Gateway - Acceso público a VPC
+# ----------------------------------------
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
   tags = {
@@ -229,7 +251,9 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-# Tabla de rutas para las subredes públicas
+# ------------------------------------------------
+# Tabla de rutas públicas - Enlace con Internet GW
+# ------------------------------------------------
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
 

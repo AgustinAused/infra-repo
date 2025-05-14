@@ -1,3 +1,6 @@
+# ---------------------------------------------------
+# Launch Template - Config de instancias backend
+# ---------------------------------------------------
 resource "aws_autoscaling_group" "backend_asg" {
   name                      = "backend-asg"
   desired_capacity          = var.desired_capacity
@@ -24,8 +27,9 @@ resource "aws_autoscaling_group" "backend_asg" {
     aws_security_group.ec2_sg
   ]
 }
-
-# Conectar ASG al Target Group
+# --------------------------------------------------
+# ASG Backend - Instancias con escalado automático
+# --------------------------------------------------
 resource "aws_autoscaling_attachment" "backend" {
   autoscaling_group_name = aws_autoscaling_group.backend_asg.name
   lb_target_group_arn    = aws_lb_target_group.backend.arn

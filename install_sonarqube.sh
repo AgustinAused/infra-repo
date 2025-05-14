@@ -1,89 +1,104 @@
 #!/bin/bash
 set -e
 
-# Configuración inicial
-SONAR_VERSION="${SONAR_VERSION}"
-SONAR_DIR="/opt/sonarqube"
-SONAR_USER="sonarqube"
-SONAR_DB_USER="sonar"
-SONAR_DB_PASSWORD="${db_password}"
-SONAR_DB_HOST="${db_endpoint}"
-SONAR_DB_NAME="sonarqube"
+# Variables inyectadas por Terraform
+DB_PASSWORD="${DB_PASSWORD}"
 
-# 1. Instalar dependencias
+# 1. Instalar PostgreSQL
+yum install -y postgresql-server postgresql-contrib
+postgresql-setup initdb
+systemctl start postgresql
+systemctl enable postgresql
+
+# 2. Configurar contraseña del superusuario 'postgres' y crear rol/DB para SonarQube
+sudo -u postgres psql <<EOSQL
+ALTER USER postgres WITH PASSWORD '${DB_PASSWORD}';
+CREATE USER sonar WITH PASSWORD '${DB_PASSWORD}';
+CREATE DATABASE sonarqube OWNER sonar;
+EOSQL
+
+# 3. Ajustar pg_hba.conf para forzar md5 en conexiones TCP locales
+pg_hba=/var/lib/pgsql/data/pg_hba.conf
+
+# Local IPv4
+sudo sed -i -E \
+  "s#^(host\s+all\s+all\s+127\.0\.0\.1/32\s+)ident#\1md5#;" \
+  $${pg_hba}
+# Local IPv6
+sudo sed -i -E \
+  "s#^(host\s+all\s+all\s+::1/128\s+)ident#\1md5#;" \
+  $${pg_hba}
+
+# Reiniciar para aplicar cambios
+systemctl reload postgresql
+
+# 4. Instalar Docker y Docker Compose
 yum update -y
-amazon-linux-extras enable epel
-yum install -y java-11-amazon-corretto-devel unzip
+amazon-linux-extras install docker -y
+systemctl start docker
+systemctl enable docker
+usermod -a -G docker ec2-user
 
-# 2. Crear usuario dedicado
-if ! id -u $SONAR_USER >/dev/null 2>&1; then
-  useradd -d $SONAR_DIR -s /bin/bash $SONAR_USER
-fi
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+     -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 
-# 3. Descargar SonarQube
-for i in {1..3}; do
-  wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-${SONAR_VERSION}.zip && break
-  sleep 10
-done
+# 5. Ajustar configuración de kernel para Elasticsearch
+sysctl -w vm.max_map_count=262144
+echo "vm.max_map_count=262144" >> /etc/sysctl.conf
 
-# 4. Descomprimir y configurar permisos
-unzip -q sonarqube-${SONAR_VERSION}.zip -d $SONAR_DIR
-mv $SONAR_DIR/sonarqube-${SONAR_VERSION}/* $SONAR_DIR
-rm -rf sonarqube-${SONAR_VERSION}.zip $SONAR_DIR/sonarqube-${SONAR_VERSION}
+# 6. Crear docker-compose.yml para SonarQube usando BD local
+cat > /home/ec2-user/docker-compose.yml <<EOF
 
-# 5. Esperar a que RDS esté disponible
-until nc -zv $SONAR_DB_HOST 5432; do
-  echo "Esperando a PostgreSQL..."
-  sleep 30
-done
+services:
+  db:
+    image: postgres:15
+    container_name: sonarqube-db
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonarqube
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - sonar_net
 
-# 6. Configurar sonar.properties
-cat > $SONAR_DIR/conf/sonar.properties <<EOF
-sonar.jdbc.username=$SONAR_DB_USER
-sonar.jdbc.password=$SONAR_DB_PASSWORD
-sonar.jdbc.url=jdbc:postgresql://$SONAR_DB_HOST/$SONAR_DB_NAME
-sonar.web.host=0.0.0.0
-sonar.web.port=9000
-sonar.search.javaOpts=-Xmx512m -Xms512m -XX:+UseG1GC
-sonar.search.javaAdditionalOpts=-Dbootstrap.system_call_filter=false
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: sonarqube
+    depends_on:
+      - db
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    networks:
+      - sonar_net
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  sonarqube_data:
+  sonarqube_extensions:
+
+networks:
+  sonar_net:
+    driver: bridge
 EOF
-chmod 600 $SONAR_DIR/conf/sonar.properties
 
-# 7. Configurar systemd service
-cat > /etc/systemd/system/sonarqube.service <<EOF
-[Unit]
-Description=SonarQube Service
-After=syslog.target network.target
+chown ec2-user:ec2-user /home/ec2-user/docker-compose.yml
 
-[Service]
-Type=simple
-User=$SONAR_USER
-Group=$SONAR_USER
-Environment="SONAR_JAVA_HOME=/usr/lib/jvm/java-11-amazon-corretto.x86_64"
-ExecStart=$SONAR_DIR/bin/linux-x86-64/sonar.sh start
-ExecStop=$SONAR_DIR/bin/linux-x86-64/sonar.sh stop
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
-LimitMEMLOCK=16384
+# 7. Iniciar SonarQube
+sudo -u ec2-user docker-compose -f /home/ec2-user/docker-compose.yml up -d
 
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# 8. Ajustar permisos e iniciar servicio
-chown -R $SONAR_USER:$SONAR_USER $SONAR_DIR
-systemctl daemon-reload
-systemctl enable sonarqube
-systemctl start sonarqube
-
-# 9. Verificar estado
-for i in {1..30}; do
-  if systemctl is-active --quiet sonarqube; then
-    echo "SonarQube está activo."
-    break
-  fi
-  sleep 10
-done
-
-curl -sI http://localhost:9000 | grep "200 OK"
+echo "⏳ Esperando que SonarQube inicie..."
+sleep 30
+docker ps | grep sonarqube || echo "El contenedor SonarQube no está corriendo"
+curl -sI http://localhost:9000 | grep "200 OK" || echo "SonarQube aún no responde en el puerto 9000"
+echo "✅ SonarQube debería estar corriendo en http://localhost:9000"

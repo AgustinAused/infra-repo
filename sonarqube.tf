@@ -7,9 +7,7 @@ resource "aws_instance" "sonarqube" {
   vpc_security_group_ids = [aws_security_group.sonarqube_sg.id]
 
   user_data = base64encode(templatefile("install_sonarqube.sh", {
-    db_password  = var.db_password
-    db_endpoint  = aws_rds_cluster.aurora.endpoint
-    SONAR_VERSION = var.sonarqube_version  # Nueva variable
+    DB_PASSWORD  = var.db_password  
   }))
 
   tags = {

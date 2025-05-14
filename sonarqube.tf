@@ -1,0 +1,45 @@
+
+resource "aws_instance" "sonarqube" {
+  ami           = "ami-0c02fb55956c7d316"  # Amazon Linux 2
+  instance_type = "t3.medium"
+  key_name      = var.key_pair_name
+  subnet_id     = aws_subnet.public_az1.id
+  vpc_security_group_ids = [aws_security_group.sonarqube_sg.id]
+
+  user_data = base64encode(templatefile("install_sonarqube.sh", {
+    db_password  = var.db_password
+    db_endpoint  = aws_rds_cluster.aurora.endpoint
+    SONAR_VERSION = var.sonarqube_version  # Nueva variable
+  }))
+
+  tags = {
+    Name = "SonarQube-Server"
+  }
+}
+
+resource "aws_security_group" "sonarqube_sg" {
+  name        = "sonarqube-sg"
+  description = "Permite acceso a SonarQube"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 9000
+    to_port     = 9000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Restringir a tu IP en producción
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}

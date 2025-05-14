@@ -1,52 +1,45 @@
 # Configuración del Proveedor AWS
 provider "aws" {
-  region = var.aws_region  # Usa la variable de región definida en variables.tf
+  region = var.aws_region
 }
 
-# Creación de VPC (Red Privada Virtual)
+# Creación de VPC
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"  # Rango IP grande para toda la red
+  cidr_block = "10.0.0.0/16"
   tags = {
     Name = "Main-VPC"
   }
 }
 
-# Data Source para obtener Zonas de Disponibilidad
+# Zonas de Disponibilidad
 data "aws_availability_zones" "available" {
-  state = "available"  # Solo considera AZs habilitadas en tu cuenta
+  state = "available"
 }
 
-# ---------------------------
-# SUBNETS PÚBLICAS (Para EC2)
-# ---------------------------
 
-# Subred Pública en AZ1
+
+# Subredes Públicas
 resource "aws_subnet" "public_az1" {
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"  # Rango IP específico para esta subred
-  availability_zone       = data.aws_availability_zones.available.names[0]  # Ej: us-east-1a
-  map_public_ip_on_launch = true  # Asigna IP pública automáticamente
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
   tags = {
     Name = "Public-Subnet-AZ1"
   }
 }
 
-# Subred Pública en AZ2 (Para alta disponibilidad)
 resource "aws_subnet" "public_az2" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[1]  # Ej: us-east-1b
+  availability_zone       = data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
   tags = {
     Name = "Public-Subnet-AZ2"
   }
 }
 
-# ---------------------------
-# SUBNETS PRIVADAS (Para RDS)
-# ---------------------------
-
-# Subred Privada en AZ1
+# Subredes Privadas
 resource "aws_subnet" "private_az1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.3.0/24"
@@ -56,7 +49,6 @@ resource "aws_subnet" "private_az1" {
   }
 }
 
-# Subred Privada en AZ2
 resource "aws_subnet" "private_az2" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.4.0/24"
@@ -65,45 +57,27 @@ resource "aws_subnet" "private_az2" {
     Name = "Private-Subnet-AZ2"
   }
 }
+resource "aws_key_pair" "deployer" {
+  key_name   = "deployer-key"  # Nombre de la clave
+  public_key = file("~/.ssh/id_rsa.pub")  # Ruta a tu clave pública local
+}
 
-# ---------------------------
-# GRUPOS DE SEGURIDAD
-# ---------------------------
-
-# Security Group para EC2 (Acceso público)
-resource "aws_security_group" "ec2_sg" {
-  name        = "ec2-security-group"
-  description = "Permite SSH, HTTP, HTTPS y puertos personalizados"
+# Security Group para ALB
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Permite trafico HTTP/HTTPS al ALB"
   vpc_id      = aws_vpc.main.id
 
-  # Regla SSH (¡restringir en producción!)
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Considerar usar una IP específica
-  }
-
-  # Regla HTTP
   ingress {
     from_port   = 80
-    to_port     = 80 # Mejor práctica: separar de 8080
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # Nuevo: Regla HTTPS agregada
   ingress {
     from_port   = 443
     to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Regla personalizada (mantenemos 9000)
-  ingress {
-    from_port   = 9000
-    to_port     = 9000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -116,7 +90,75 @@ resource "aws_security_group" "ec2_sg" {
   }
 }
 
-# Security Group para RDS (Acceso privado)
+# Application Load Balancer (ALB)
+resource "aws_lb" "backend" {
+  name               = "backend-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = [aws_subnet.public_az1.id, aws_subnet.public_az2.id]
+}
+
+# Target Group para el backend
+resource "aws_lb_target_group" "backend" {
+  name     = "backend-tg"
+  port     = 8080  # Puerto de tu aplicación
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/actuator/health"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+# Listener del ALB
+resource "aws_lb_listener" "backend" {
+  load_balancer_arn = aws_lb.backend.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+}
+
+# Security Group para EC2 (solo permite tráfico del ALB)
+resource "aws_security_group" "ec2_sg" {
+  name        = "ec2-sg"
+  description = "Permite trafico del ALB y SSH restringido"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 8080  # Puerto de la aplicación
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]  # Solo desde el ALB
+  }
+
+  ingress {
+    from_port   = 22  # SSH restringido a tu IP
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.my_ip]  # Ej: "200.100.50.25/32"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ---------------------------
+# SECURITY GROUP PARA RDS
+# ---------------------------
+
 resource "aws_security_group" "rds_sg" {
   name        = "rds-security-group"
   description = "Permite acceso solo desde el EC2"
@@ -136,34 +178,7 @@ resource "aws_security_group" "rds_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-# ---------------------------
-# EC2 - SERVIDOR DE APLICACIONES
-# ---------------------------
-
-# Par de claves SSH
-resource "aws_key_pair" "deployer" {
-  key_name   = "deployer-key"
-  public_key = var.ec2_public_key  # Llave pública desde variables
-}
-
-# Instancia EC2
-resource "aws_instance" "app_server" {
-  ami           = var.ec2_ami  # AMI desde variables (ej: Amazon Linux 2)
-  instance_type = var.ec2_type
-  subnet_id     = aws_subnet.public_az1.id  # Se despliega en subred pública
-
-  key_name               = aws_key_pair.deployer.key_name
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  associate_public_ip_address = true  # IP pública accesible desde internet
-
-  # Script de inicialización (debe existir en tu directorio)
-  user_data = file("${path.module}/user-data.sh")
-
-  tags = {
-    Name = "Application-Server"
-  }
+  depends_on = [aws_security_group.ec2_sg]
 }
 
 # ---------------------------
@@ -203,4 +218,38 @@ resource "aws_rds_cluster_instance" "aurora_instance" {
   tags = {
     Name = "Aurora-DB-Instance"
   }
+}
+
+
+# Recursos de VPC Internet
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "Main-IGW"
+  }
+}
+
+# Tabla de rutas para las subredes públicas
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+
+  tags = {
+    Name = "Public-RouteTable"
+  }
+}
+
+# Asociar subredes públicas a la tabla de rutas
+resource "aws_route_table_association" "public_az1" {
+  subnet_id      = aws_subnet.public_az1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+resource "aws_route_table_association" "public_az2" {
+  subnet_id      = aws_subnet.public_az2.id
+  route_table_id = aws_route_table.public_rt.id
 }

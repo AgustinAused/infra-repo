@@ -1,7 +1,17 @@
-output "ec2_public_ip" {
-  value = aws_instance.app_server.public_ip
+output "alb_dns" {
+  description = "DNS del ALB"
+  value       = aws_lb.backend.dns_name
 }
 
 output "rds_endpoint" {
-  value = aws_rds_cluster.aurora.endpoint
+  description = "Endpoint de RDS"
+  value       = aws_rds_cluster.aurora.endpoint
+}
+
+output "asg_name" {
+  value = aws_autoscaling_group.backend_asg.name
+}
+
+output "sonarqube_ip" {
+  value = aws_instance.sonarqube.public_ip
 }

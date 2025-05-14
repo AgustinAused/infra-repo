@@ -7,12 +7,15 @@ on:
   workflow_dispatch:
   workflow_call:
     outputs:
-      ec2_ip:
-        description: "EC2 IP"
-        value: ${{ jobs.terraform.outputs.ec2_ip }}
+      ags_name:
+        description: "AGS Name"
+        value: ${{ jobs.terraform.outputs.ags_name }}
       db_endpoint: 
         description: "DB Endpoint"
         value: ${{ jobs.terraform.outputs.db_endpoint }}
+      alb_dns:
+        description: "ALB DNS"
+        value: ${{ jobs.terraform.outputs.alb_dns }}
 
 
 jobs:
@@ -21,7 +24,9 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      ec2_ip: ${{ steps.output.outputs.ec2_ip }}
+      db_endpoint: ${{ steps.output.outputs.db_endpoint }}
+      alb_dns: ${{ steps.output.outputs.alb_dns }}
+      ags_name: ${{ steps.output.outputs.ags_name }}
 
     steps:
       - name: Checkout code
@@ -47,10 +52,11 @@ jobs:
         run: terraform plan
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve
+        run: ./deploy-backend.sh
       
       - name: Output EC2 IP and DB Endpoint
         id: output
         run: |
-          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
           echo "db_endpoint=$(terraform output -raw db_endpoint)" >> $GITHUB_OUTPUT
+          echo "alb_dns=$(terraform output -raw alb_dns)" >> $GITHUB_OUTPUT
+          echo "ags_name=$(terraform output -raw ags_name)" >> $GITHUB_OUTPUT

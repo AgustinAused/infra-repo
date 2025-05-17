@@ -16,7 +16,12 @@ resource "aws_launch_template" "backend" {
   iam_instance_profile {
     name = aws_iam_instance_profile.lab_profile.name  # Asignar el Instance Profile
   }
-  user_data = base64encode(file("${path.module}/user-data.sh"))
+  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+    db_endpoint = aws_rds_cluster.aurora.endpoint,
+    db_user     = var.db_username,
+    db_password = var.db_password,
+    url         = var.backend_domain
+  }))
 
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
 

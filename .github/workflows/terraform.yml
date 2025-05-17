@@ -16,6 +16,9 @@ on:
       alb_dns:
         description: "ALB DNS"
         value: ${{ jobs.terraform.outputs.alb_dns }}
+      sonarqube_url:
+        description: "SonarQube URL"
+        value: ${{ jobs.terraform.outputs.sonarqube_url }}
 
 
 jobs:
@@ -27,6 +30,7 @@ jobs:
       db_endpoint: ${{ steps.output.outputs.db_endpoint }}
       alb_dns: ${{ steps.output.outputs.alb_dns }}
       ags_name: ${{ steps.output.outputs.ags_name }}
+      sonarqube_url: ${{ steps.output.outputs.sonarqube_url }}
 
     steps:
       - name: Checkout code
@@ -60,3 +64,5 @@ jobs:
           echo "db_endpoint=$(terraform output -raw db_endpoint)" >> $GITHUB_OUTPUT
           echo "alb_dns=$(terraform output -raw alb_dns)" >> $GITHUB_OUTPUT
           echo "ags_name=$(terraform output -raw ags_name)" >> $GITHUB_OUTPUT
+          sonarqube_ip=$(terraform output -raw sonarqube_ip)
+          echo "sonarqube_url=http://${sonarqube_ip}:9000" >> $GITHUB_OUTPUT
